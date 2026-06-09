@@ -7,18 +7,20 @@ const INITIAL = {
   precio_primera: '',
   kilos_segunda: '',
   precio_segunda: '',
+  kilos_tercera: '',
+  precio_tercera: '0',
   total_ingreso: '',
   registrado_por: '',
 }
 
 export default function VentaForm() {
   const [form, setForm] = useState(INITIAL)
-  const [trabajadores, setTrabajadores] = useState([])
+  const [socios, setSocios] = useState([])
   const [loading, setLoading] = useState(false)
   const [mensaje, setMensaje] = useState(null)
 
   useEffect(() => {
-    api.get('/api/trabajadores').then(setTrabajadores).catch(() => {})
+    api.get('/api/socios').then(setSocios).catch(() => {})
   }, [])
 
   const set = (field) => (e) => {
@@ -28,7 +30,10 @@ export default function VentaForm() {
       // Calcular total automáticamente si ambos precios/kilos están
       const p1 = Number(next.kilos_primera || 0) * Number(next.precio_primera || 0)
       const p2 = Number(next.kilos_segunda || 0) * Number(next.precio_segunda || 0)
-      if (p1 + p2 > 0) next.total_ingreso = String(p1 + p2)
+      const p3 = Number(next.precio_tercera || 0) > 0
+        ? Number(next.kilos_tercera || 0) * Number(next.precio_tercera)
+        : 0
+      if (p1 + p2 + p3 > 0) next.total_ingreso = String(p1 + p2 + p3)
       return next
     })
   }
@@ -102,6 +107,23 @@ export default function VentaForm() {
           </div>
         </fieldset>
 
+        <fieldset className="border border-gray-200 rounded-lg p-3 space-y-3">
+          <legend className="text-sm font-medium text-gray-600 px-1">
+            Tercera calidad
+            <span className="ml-2 text-xs text-gray-400 font-normal">(no se vende)</span>
+          </legend>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Kilos</label>
+              <input className="input" type="number" min="0" step="any" value={form.kilos_tercera} onChange={set('kilos_tercera')} />
+            </div>
+            <div>
+              <label className="label">Precio/kg</label>
+              <input className="input bg-gray-100 text-gray-400 cursor-not-allowed" type="number" value={form.precio_tercera} readOnly tabIndex={-1} />
+            </div>
+          </div>
+        </fieldset>
+
         <div>
           <label className="label">Total ingreso (COP) *</label>
           <input
@@ -118,8 +140,8 @@ export default function VentaForm() {
           <label className="label">Registrado por</label>
           <select className="input" value={form.registrado_por} onChange={set('registrado_por')}>
             <option value="">Seleccionar...</option>
-            {trabajadores.map((t) => (
-              <option key={t.id} value={t.id}>{t.nombre}</option>
+            {socios.map((s) => (
+              <option key={s.id} value={s.id}>{s.nombre}</option>
             ))}
           </select>
         </div>

@@ -28,12 +28,15 @@ router.post('/', async (req, res, next) => {
     kilos_segunda, precio_segunda,
     total_ingreso, registrado_por,
   } = req.body;
+  const rp = registrado_por || null;
   try {
     const result = await pool.query(
       `INSERT INTO ventas
-         (producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso, registrado_por)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso, registrado_por]
+         (producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso${rp ? ', registrado_por' : ''})
+       VALUES ($1, $2, $3, $4, $5, $6${rp ? ', $7' : ''}) RETURNING *`,
+      rp
+        ? [producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso, rp]
+        : [producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -48,13 +51,15 @@ router.put('/:id', async (req, res, next) => {
     kilos_segunda, precio_segunda,
     total_ingreso, registrado_por,
   } = req.body;
+  const rp = registrado_por || null;
   try {
     const result = await pool.query(
       `UPDATE ventas
        SET producto = $1, kilos_primera = $2, precio_primera = $3,
-           kilos_segunda = $4, precio_segunda = $5, total_ingreso = $6, registrado_por = $7
+           kilos_segunda = $4, precio_segunda = $5, total_ingreso = $6,
+           registrado_por = $7
        WHERE id = $8 RETURNING *`,
-      [producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso, registrado_por, req.params.id]
+      [producto, kilos_primera, precio_primera, kilos_segunda, precio_segunda, total_ingreso, rp, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Venta no encontrada' });
     res.json(result.rows[0]);

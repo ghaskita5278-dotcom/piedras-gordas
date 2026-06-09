@@ -4,6 +4,7 @@ import GastoForm from './pages/GastoForm'
 import VentaForm from './pages/VentaForm'
 import Trabajadores from './pages/Trabajadores'
 import PagoTrabajador from './pages/PagoTrabajador'
+import Socios from './pages/Socios'
 import PagoSocio from './pages/PagoSocio'
 import Transacciones from './pages/Transacciones'
 
@@ -12,7 +13,7 @@ const NAV = [
   { to: '/gastos', label: 'Gasto', icon: '💸' },
   { to: '/ventas', label: 'Venta', icon: '📦' },
   { to: '/trabajadores', label: 'Equipo', icon: '👷' },
-  { to: '/socios', label: 'Socio', icon: '🤝' },
+  { to: '/socios', label: 'Socios', icon: '👥' },
   { to: '/transacciones', label: 'Historial', icon: '📋' },
 ]
 
@@ -33,7 +34,8 @@ export default function App() {
             <Route path="/ventas" element={<VentaForm />} />
             <Route path="/trabajadores" element={<Trabajadores />} />
             <Route path="/pagos/trabajador" element={<PagoTrabajador />} />
-            <Route path="/socios" element={<PagoSocio />} />
+            <Route path="/socios" element={<Socios />} />
+            <Route path="/pagos/socio" element={<PagoSocio />} />
             <Route path="/transacciones" element={<Transacciones />} />
           </Routes>
         </main>
