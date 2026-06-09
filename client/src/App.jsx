@@ -7,9 +7,12 @@ import PagoTrabajador from './pages/PagoTrabajador'
 import Socios from './pages/Socios'
 import PagoSocio from './pages/PagoSocio'
 import Transacciones from './pages/Transacciones'
+import Recibo from './pages/Recibo'
+import Caja from './pages/Caja'
 
 const NAV = [
   { to: '/', label: 'Inicio', icon: '🏠' },
+  { to: '/caja', label: 'Caja', icon: '💰' },
   { to: '/gastos', label: 'Gasto', icon: '💸' },
   { to: '/ventas', label: 'Venta', icon: '📦' },
   { to: '/trabajadores', label: 'Equipo', icon: '👷' },
@@ -36,7 +39,9 @@ export default function App() {
             <Route path="/pagos/trabajador" element={<PagoTrabajador />} />
             <Route path="/socios" element={<Socios />} />
             <Route path="/pagos/socio" element={<PagoSocio />} />
+            <Route path="/caja" element={<Caja />} />
             <Route path="/transacciones" element={<Transacciones />} />
+            <Route path="/recibo/:id" element={<Recibo />} />
           </Routes>
         </main>
 
@@ -48,7 +53,7 @@ export default function App() {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `flex flex-col items-center py-2 px-1 text-xs flex-1 transition-colors ${
+                `flex flex-col items-center py-2 px-0.5 text-[10px] flex-1 transition-colors ${
                   isActive ? 'text-green-700 font-semibold' : 'text-gray-500'
                 }`
               }

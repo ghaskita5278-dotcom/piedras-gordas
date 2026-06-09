@@ -18,3 +18,9 @@
            text-white font-semibold py-3 rounded-xl transition-colors text-sm;
   }
 }
+
+@media print {
+  header, nav, .print\:hidden { display: none !important; }
+  main { padding-bottom: 0 !important; }
+  body { background: white; }
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 
 const CATEGORIAS = [
@@ -20,9 +21,11 @@ const INITIAL = {
   unidad: '',
   valor: '',
   registrado_por: '',
+  tipo_pago: '',
 }
 
 export default function GastoForm() {
+  const navigate = useNavigate()
   const [form, setForm] = useState(INITIAL)
   const [trabajadores, setTrabajadores] = useState([])
   const [loading, setLoading] = useState(false)
@@ -39,12 +42,17 @@ export default function GastoForm() {
     setLoading(true)
     setMensaje(null)
     try {
-      await api.post('/api/gastos', {
+      const gasto = await api.post('/api/gastos', {
         ...form,
         cantidad: form.cantidad ? Number(form.cantidad) : null,
         valor: Number(form.valor),
         registrado_por: form.registrado_por ? Number(form.registrado_por) : null,
+        tipo_pago: form.tipo_pago || null,
       })
+      if (form.tipo_pago === 'efectivo') {
+        navigate(`/recibo/${gasto.id}`)
+        return
+      }
       setMensaje({ type: 'ok', text: 'Gasto registrado correctamente' })
       setForm(INITIAL)
     } catch (err) {
@@ -97,6 +105,15 @@ export default function GastoForm() {
         <div>
           <label className="label">Valor (COP) *</label>
           <input className="input" type="number" min="0" step="any" value={form.valor} onChange={set('valor')} required />
+        </div>
+
+        <div>
+          <label className="label">Tipo de pago</label>
+          <select className="input" value={form.tipo_pago} onChange={set('tipo_pago')}>
+            <option value="">Seleccionar...</option>
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
         </div>
 
         <div>
