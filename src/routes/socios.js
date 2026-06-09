@@ -22,11 +22,11 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const { nombre, porcentaje } = req.body;
+  const { nombre, telefono_whatsapp } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO socios (nombre, porcentaje) VALUES ($1, $2) RETURNING *`,
-      [nombre, porcentaje]
+      'INSERT INTO socios (nombre, telefono_whatsapp) VALUES ($1, $2) RETURNING *',
+      [nombre, telefono_whatsapp]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -35,11 +35,11 @@ router.post('/', async (req, res, next) => {
 });
 
 router.put('/:id', async (req, res, next) => {
-  const { nombre, porcentaje } = req.body;
+  const { nombre, telefono_whatsapp } = req.body;
   try {
     const result = await pool.query(
-      `UPDATE socios SET nombre = $1, porcentaje = $2 WHERE id = $3 RETURNING *`,
-      [nombre, porcentaje, req.params.id]
+      'UPDATE socios SET nombre = $1, telefono_whatsapp = $2 WHERE id = $3 RETURNING *',
+      [nombre, telefono_whatsapp, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Socio no encontrado' });
     res.json(result.rows[0]);
@@ -58,45 +58,36 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-// POST /:id/pagos — registra pago en gastos (categoria='pago_socio'), actualiza obligación si se pasa
-// obligacion_id, y registra en transacciones
+// POST /:id/pagos — registra en transacciones y, si se envía obligacion_id, marca la obligación
+// como pagada. Ambas escrituras van en una transacción atómica.
 router.post('/:id/pagos', async (req, res, next) => {
-  const { monto, descripcion, fecha, obligacion_id } = req.body;
+  const { monto, tipo_pago, url_soporte, obligacion_id } = req.body;
   const socioId = req.params.id;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const socioResult = await client.query('SELECT * FROM socios WHERE id = $1', [socioId]);
-    if (socioResult.rows.length === 0) {
+    const socio = await client.query('SELECT * FROM socios WHERE id = $1', [socioId]);
+    if (socio.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Socio no encontrado' });
     }
 
-    const gastoResult = await client.query(
-      `INSERT INTO gastos (descripcion, monto, categoria, socio_id, fecha)
-       VALUES ($1, $2, 'pago_socio', $3, $4) RETURNING *`,
-      [descripcion || `Pago a socio ${socioId}`, monto, socioId, fecha || new Date()]
+    const txResult = await client.query(
+      `INSERT INTO transacciones (socio_id, obligacion_id, monto, tipo_pago, url_soporte)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [socioId, obligacion_id || null, monto, tipo_pago, url_soporte || null]
     );
-    const gasto = gastoResult.rows[0];
 
     if (obligacion_id) {
       await client.query(
-        `UPDATE obligaciones SET monto_pagado = COALESCE(monto_pagado, 0) + $1,
-         estado = CASE WHEN COALESCE(monto_pagado, 0) + $1 >= monto THEN 'pagado' ELSE 'parcial' END
-         WHERE id = $2`,
-        [monto, obligacion_id]
+        `UPDATE obligaciones SET estado = 'pagado' WHERE id = $1`,
+        [obligacion_id]
       );
     }
 
-    await client.query(
-      `INSERT INTO transacciones (tipo, monto, descripcion, referencia_id, referencia_tipo, fecha)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      ['egreso', monto, gasto.descripcion, gasto.id, 'gasto', gasto.fecha]
-    );
-
     await client.query('COMMIT');
-    res.status(201).json(gasto);
+    res.status(201).json(txResult.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

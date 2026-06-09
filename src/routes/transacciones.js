@@ -2,30 +2,43 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
-// GET /resumen — debe ir antes de GET /:id para no colisionar
+// GET /resumen — balance entre ingresos (ventas) y egresos (gastos + pagos a socios)
+// Debe ir antes de GET /:id para no colisionar con la ruta parametrizada
 router.get('/resumen', async (req, res, next) => {
   const { fecha_inicio, fecha_fin } = req.query;
   try {
     const params = [];
-    const condiciones = [];
+    const ventasCond = [];
+    const gastosCond = [];
+    const txCond = [];
 
     if (fecha_inicio) {
       params.push(fecha_inicio);
-      condiciones.push(`fecha >= $${params.length}`);
+      const p = `$${params.length}`;
+      ventasCond.push(`created_at >= ${p}`);
+      gastosCond.push(`created_at >= ${p}`);
+      txCond.push(`created_at >= ${p}`);
     }
     if (fecha_fin) {
       params.push(fecha_fin);
-      condiciones.push(`fecha <= $${params.length}`);
+      const p = `$${params.length}`;
+      ventasCond.push(`created_at <= ${p}`);
+      gastosCond.push(`created_at <= ${p}`);
+      txCond.push(`created_at <= ${p}`);
     }
 
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    const wVentas = ventasCond.length ? `WHERE ${ventasCond.join(' AND ')}` : '';
+    const wGastos = gastosCond.length ? `WHERE ${gastosCond.join(' AND ')}` : '';
+    const wTx = txCond.length ? `WHERE ${txCond.join(' AND ')}` : '';
 
     const result = await pool.query(
       `SELECT
-         COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE 0 END), 0) AS total_ingresos,
-         COALESCE(SUM(CASE WHEN tipo = 'egreso'  THEN monto ELSE 0 END), 0) AS total_egresos,
-         COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE -monto END), 0) AS balance
-       FROM transacciones ${where}`,
+         (SELECT COALESCE(SUM(total_ingreso), 0) FROM ventas ${wVentas})       AS total_ingresos,
+         (SELECT COALESCE(SUM(valor), 0)         FROM gastos ${wGastos})       AS total_gastos,
+         (SELECT COALESCE(SUM(monto), 0)         FROM transacciones ${wTx})    AS total_pagos_socios,
+         (SELECT COALESCE(SUM(total_ingreso), 0) FROM ventas ${wVentas})
+           - (SELECT COALESCE(SUM(valor), 0) FROM gastos ${wGastos})
+           - (SELECT COALESCE(SUM(monto), 0) FROM transacciones ${wTx})       AS balance`,
       params
     );
 
@@ -35,34 +48,37 @@ router.get('/resumen', async (req, res, next) => {
   }
 });
 
-// GET / — lista con filtros opcionales: tipo, fecha_inicio, fecha_fin, referencia_tipo
+// GET / — lista con filtros opcionales: socio_id, obligacion_id, tipo_pago, fecha_inicio, fecha_fin
 router.get('/', async (req, res, next) => {
-  const { tipo, fecha_inicio, fecha_fin, referencia_tipo } = req.query;
+  const { socio_id, obligacion_id, tipo_pago, fecha_inicio, fecha_fin } = req.query;
   try {
     const params = [];
     const condiciones = [];
 
-    if (tipo) {
-      params.push(tipo);
-      condiciones.push(`tipo = $${params.length}`);
+    if (socio_id) {
+      params.push(socio_id);
+      condiciones.push(`socio_id = $${params.length}`);
     }
-    if (referencia_tipo) {
-      params.push(referencia_tipo);
-      condiciones.push(`referencia_tipo = $${params.length}`);
+    if (obligacion_id) {
+      params.push(obligacion_id);
+      condiciones.push(`obligacion_id = $${params.length}`);
+    }
+    if (tipo_pago) {
+      params.push(tipo_pago);
+      condiciones.push(`tipo_pago = $${params.length}`);
     }
     if (fecha_inicio) {
       params.push(fecha_inicio);
-      condiciones.push(`fecha >= $${params.length}`);
+      condiciones.push(`created_at >= $${params.length}`);
     }
     if (fecha_fin) {
       params.push(fecha_fin);
-      condiciones.push(`fecha <= $${params.length}`);
+      condiciones.push(`created_at <= $${params.length}`);
     }
 
     const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
-
     const result = await pool.query(
-      `SELECT * FROM transacciones ${where} ORDER BY fecha DESC`,
+      `SELECT * FROM transacciones ${where} ORDER BY created_at DESC`,
       params
     );
     res.json(result.rows);
