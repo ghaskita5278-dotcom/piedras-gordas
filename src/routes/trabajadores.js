@@ -22,11 +22,11 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const { nombre } = req.body;
+  const { nombre, cedula, telefono } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO trabajadores (nombre) VALUES ($1) RETURNING *',
-      [nombre]
+      'INSERT INTO trabajadores (nombre, cedula, telefono) VALUES ($1, $2, $3) RETURNING *',
+      [nombre, cedula || null, telefono || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -35,11 +35,11 @@ router.post('/', async (req, res, next) => {
 });
 
 router.put('/:id', async (req, res, next) => {
-  const { nombre } = req.body;
+  const { nombre, cedula, telefono } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE trabajadores SET nombre = $1 WHERE id = $2 RETURNING *',
-      [nombre, req.params.id]
+      'UPDATE trabajadores SET nombre = $1, cedula = $2, telefono = $3 WHERE id = $4 RETURNING *',
+      [nombre, cedula || null, telefono || null, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Trabajador no encontrado' });
     res.json(result.rows[0]);
