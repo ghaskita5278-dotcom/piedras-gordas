@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { api } from '../api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,6 @@ export default function Reportes() {
   const [loading, setLoading]     = useState(false)
   const [exportando, setExportando] = useState(false)
   const [error, setError]         = useState(null)
-  const reporteRef                = useRef(null)
 
   function seleccionarPeriodo(p) {
     setPeriodo(p)
@@ -117,32 +116,273 @@ export default function Reportes() {
   }
 
   async function exportarPDF() {
-    if (!reporteRef.current) return
+    if (!reporte) return
     setExportando(true)
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ])
-      const canvas = await html2canvas(reporteRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#f9fafb',
-        logging: false,
+      const { default: jsPDF }    = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+      const G   = [26, 107, 58]          // corporate green #1a6b3a
+      const DRK = [30, 30, 30]           // near-black text
+      const GRY = [243, 244, 246]        // gray-100 bg
+      const SUB = [229, 231, 235]        // gray-200 subtotal rows
+      const WHT = [255, 255, 255]
+
+      const pW = doc.internal.pageSize.getWidth()    // 210 mm
+      const pH = doc.internal.pageSize.getHeight()   // 297 mm
+      const mL = 14
+      const mR = 14
+      const mTop = 20
+
+      const genDateStr = new Date().toLocaleDateString('es-CO', {
+        day: '2-digit', month: 'long', year: 'numeric',
       })
-      const imgData = canvas.toDataURL('image/jpeg', 0.92)
-      const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const pageW  = pdf.internal.pageSize.getWidth()
-      const pageH  = pdf.internal.pageSize.getHeight()
-      const imgW   = pageW
-      const imgH   = (canvas.height * imgW) / canvas.width
-      let offsetY  = 0
-      while (offsetY < imgH) {
-        if (offsetY > 0) pdf.addPage()
-        pdf.addImage(imgData, 'JPEG', 0, -offsetY, imgW, imgH)
-        offsetY += pageH
+      const reportNum = `RPT-${desde.replace(/-/g, '')}-${hasta.replace(/-/g, '')}`
+
+      // ── header band drawn on each page ──
+      function drawHeader() {
+        doc.setFillColor(...G)
+        doc.rect(0, 0, pW, 13, 'F')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(13)
+        doc.setTextColor(...WHT)
+        doc.text('PIEDRAS GORDAS', mL, 9)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        doc.text('Finca de producción · Reporte financiero', pW - mR, 9, { align: 'right' })
       }
-      pdf.save(`reporte-piedras-gordas-${desde}-${hasta}.pdf`)
+
+      drawHeader()
+
+      let y = 19
+
+      // Report meta
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(...DRK)
+      doc.text(reportNum, mL, y)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Período: ${desde} al ${hasta}   ·   Generado: ${genDateStr}`, mL, y + 5)
+
+      y += 11
+
+      // Divider
+      doc.setDrawColor(...G)
+      doc.setLineWidth(0.5)
+      doc.line(mL, y, pW - mR, y)
+      y += 7
+
+      // ── helpers ──
+      const BASE = {
+        styles:             { fontSize: 7.5, cellPadding: 2.5, lineColor: [220, 220, 220], lineWidth: 0.1 },
+        headStyles:         { fillColor: G, textColor: WHT, fontStyle: 'bold', fontSize: 8 },
+        footStyles:         { fillColor: GRY, textColor: DRK, fontStyle: 'bold', fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [250, 250, 250] },
+        margin:             { left: mL, right: mR },
+        didDrawPage:        () => { drawHeader() },
+      }
+
+      function secTitle(text, curY) {
+        if (curY > pH - 55) { doc.addPage(); drawHeader(); curY = mTop }
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor(...G)
+        doc.text(text, mL, curY)
+        return curY + 4
+      }
+
+      // ── 1. RESUMEN GENERAL ──
+      y = secTitle('RESUMEN GENERAL', y)
+      const totalEgresos = Number(reporte.resumen.total_gastos ?? 0) + Number(reporte.resumen.total_pagos_socios ?? 0)
+      const bal = Number(reporte.resumen.balance)
+
+      autoTable(doc, {
+        ...BASE,
+        startY: y,
+        head: [['Ingresos totales', 'Egresos totales', 'Balance neto', 'Kilos vendidos']],
+        body: [[
+          fmt(reporte.resumen.total_ingresos),
+          fmt(totalEgresos),
+          fmt(bal),
+          fmtKg(reporte.kilosTotales),
+        ]],
+        styles:    { ...BASE.styles, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+        headStyles: { ...BASE.headStyles, halign: 'center' },
+        columnStyles: {
+          0: { textColor: [20, 120, 60] },
+          1: { textColor: [180, 30, 30] },
+          2: { textColor: bal >= 0 ? [20, 120, 60] : [180, 30, 30] },
+          3: { textColor: DRK },
+        },
+      })
+      y = doc.lastAutoTable.finalY + 8
+
+      // ── 2. VENTAS ──
+      if (reporte.ventasFiltradas.length > 0) {
+        y = secTitle('VENTAS', y)
+        const totKg1 = reporte.ventasFiltradas.reduce((s, v) => s + Number(v.kilos_primera || 0), 0)
+        const totKg2 = reporte.ventasFiltradas.reduce((s, v) => s + Number(v.kilos_segunda  || 0), 0)
+        const totKg3 = reporte.ventasFiltradas.reduce((s, v) => s + Number(v.kilos_tercera  || 0), 0)
+        const totV   = reporte.ventasFiltradas.reduce((s, v) => s + Number(v.total_ingreso  || 0), 0)
+        const fmtN   = (n) => Number(n || 0).toLocaleString('es-CO')
+
+        autoTable(doc, {
+          ...BASE,
+          startY: y,
+          head: [['Fecha', 'Producto', '1ª kg', '1ª precio', '2ª kg', '2ª precio', '3ª kg', 'Total']],
+          body: reporte.ventasFiltradas.map((v) => [
+            new Date(v.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
+            v.producto,
+            v.kilos_primera  ? `${fmtN(v.kilos_primera)} kg`  : '—',
+            v.precio_primera ? fmt(v.precio_primera)           : '—',
+            v.kilos_segunda  ? `${fmtN(v.kilos_segunda)} kg`  : '—',
+            v.precio_segunda ? fmt(v.precio_segunda)           : '—',
+            v.kilos_tercera  ? `${fmtN(v.kilos_tercera)} kg`  : '—',
+            { content: fmt(v.total_ingreso), styles: { fontStyle: 'bold', textColor: [20, 120, 60] } },
+          ]),
+          foot: [[
+            '', `Total (${reporte.ventasFiltradas.length})`,
+            `${fmtN(totKg1)} kg`, '',
+            `${fmtN(totKg2)} kg`, '',
+            `${fmtN(totKg3)} kg`,
+            { content: fmt(totV), styles: { halign: 'right' } },
+          ]],
+          showFoot: 'lastPage',
+          columnStyles: {
+            0: { cellWidth: 15 },
+            1: { cellWidth: 26 },
+            3: { halign: 'right' },
+            5: { halign: 'right' },
+            7: { halign: 'right' },
+          },
+        })
+        y = doc.lastAutoTable.finalY + 8
+      }
+
+      // ── 3. GASTOS POR CATEGORÍA ──
+      if (reporte.gastosFiltrados.length > 0) {
+        y = secTitle('GASTOS POR CATEGORÍA', y)
+
+        const ORD = ['insumos', 'pago_trabajador', 'combustible', 'otro']
+        const LBL = { insumos: 'Insumos', pago_trabajador: 'Pago trabajador', combustible: 'Combustible', otro: 'Otro' }
+        const normC = (c) => { const lc = (c || 'otro').toLowerCase(); return ORD.includes(lc) ? lc : 'otro' }
+        const grps  = Object.fromEntries(ORD.map((c) => [c, []]))
+        reporte.gastosFiltrados.forEach((g) => grps[normC(g.categoria)].push(g))
+        const totG = reporte.gastosFiltrados.reduce((s, g) => s + Number(g.valor), 0)
+
+        const body = []
+        ORD.forEach((cat) => {
+          const filas = grps[cat]
+          if (!filas.length) return
+          const sub = filas.reduce((s, g) => s + Number(g.valor), 0)
+          const pct = totG > 0 ? ((sub / totG) * 100).toFixed(0) : 0
+
+          body.push([{
+            content: LBL[cat].toUpperCase(),
+            colSpan: 3,
+            styles: { fillColor: G, textColor: WHT, fontStyle: 'bold', fontSize: 8 },
+          }])
+          filas.forEach((g) => body.push([
+            new Date(g.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
+            g.descripcion || '—',
+            { content: fmt(g.valor), styles: { halign: 'right' } },
+          ]))
+          body.push([
+            { content: `Subtotal ${LBL[cat]} · ${pct}%`, colSpan: 2,
+              styles: { fillColor: SUB, fontStyle: 'bold', textColor: DRK } },
+            { content: fmt(sub), styles: { halign: 'right', fillColor: SUB, fontStyle: 'bold', textColor: DRK } },
+          ])
+        })
+
+        autoTable(doc, {
+          ...BASE,
+          startY: y,
+          head: [['Fecha', 'Descripción', 'Valor']],
+          body,
+          foot: [['', 'TOTAL GASTOS',
+            { content: fmt(totG), styles: { halign: 'right' } },
+          ]],
+          showFoot: 'lastPage',
+          columnStyles: {
+            0: { cellWidth: 22 },
+            2: { halign: 'right', cellWidth: 32 },
+          },
+        })
+        y = doc.lastAutoTable.finalY + 8
+      }
+
+      // ── 4. SOCIOS ──
+      if (reporte.aportesResumen?.length > 0) {
+        y = secTitle('SOCIOS', y)
+
+        autoTable(doc, {
+          ...BASE,
+          startY: y,
+          head: [['Socio', 'Aportado', 'Devuelto', 'Saldo pendiente']],
+          body: reporte.aportesResumen.map((s) => [
+            s.socio_nombre,
+            { content: fmt(s.total_aportado), styles: { halign: 'right', textColor: [20, 120, 60] } },
+            { content: fmt(s.total_devuelto),  styles: { halign: 'right', textColor: [30, 80, 160] } },
+            { content: fmt(s.saldo_pendiente), styles: { halign: 'right', fontStyle: 'bold',
+              textColor: Number(s.saldo_pendiente) > 0 ? [160, 80, 0] : DRK } },
+          ]),
+          foot: [['TOTAL',
+            { content: fmt(reporte.aportesResumen.reduce((s, r) => s + Number(r.total_aportado), 0)), styles: { halign: 'right' } },
+            { content: fmt(reporte.aportesResumen.reduce((s, r) => s + Number(r.total_devuelto),  0)), styles: { halign: 'right' } },
+            { content: fmt(reporte.aportesResumen.reduce((s, r) => s + Number(r.saldo_pendiente), 0)), styles: { halign: 'right' } },
+          ]],
+          showFoot: 'lastPage',
+          styles: { ...BASE.styles, fontSize: 8 },
+        })
+        y = doc.lastAutoTable.finalY + 8
+      }
+
+      // ── 5. PAGOS A TRABAJADORES ──
+      if (reporte.pagosTrabajadores?.length > 0) {
+        y = secTitle('PAGOS A TRABAJADORES', y)
+
+        autoTable(doc, {
+          ...BASE,
+          startY: y,
+          head: [['Trabajador', 'Fecha', 'Monto']],
+          body: reporte.pagosTrabajadores.map((g) => [
+            g.descripcion || '—',
+            new Date(g.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }),
+            { content: fmt(g.valor), styles: { halign: 'right', fontStyle: 'bold' } },
+          ]),
+          foot: [[
+            `Total (${reporte.pagosTrabajadores.length} pagos)`, '',
+            { content: fmt(reporte.pagosTrabajadores.reduce((s, g) => s + Number(g.valor), 0)),
+              styles: { halign: 'right' } },
+          ]],
+          showFoot: 'lastPage',
+          styles: { ...BASE.styles, fontSize: 8 },
+          columnStyles: {
+            1: { cellWidth: 28 },
+            2: { cellWidth: 30, halign: 'right' },
+          },
+        })
+      }
+
+      // ── footer on every page ──
+      const numPages = doc.internal.getNumberOfPages()
+      for (let p = 1; p <= numPages; p++) {
+        doc.setPage(p)
+        doc.setDrawColor(...G)
+        doc.setLineWidth(0.3)
+        doc.line(mL, pH - 12, pW - mR, pH - 12)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(6.5)
+        doc.setTextColor(140, 140, 140)
+        doc.text(`Generado por Piedras Gordas · ${genDateStr}`, mL, pH - 8)
+        doc.text(`Página ${p} de ${numPages}`, pW - mR, pH - 8, { align: 'right' })
+      }
+
+      doc.save(`reporte-piedras-gordas-${desde}-${hasta}.pdf`)
     } finally {
       setExportando(false)
     }
@@ -221,8 +461,7 @@ export default function Reportes() {
             {exportando ? 'Generando PDF...' : '⬇ Exportar PDF'}
           </button>
 
-          {/* Contenido capturado por el PDF */}
-          <div ref={reporteRef} className="space-y-6">
+          <div className="space-y-6">
 
           {/* 1. Resumen general */}
           <div>
@@ -433,7 +672,7 @@ export default function Reportes() {
             )}
           </div>
 
-          </div>{/* /reporteRef */}
+          </div>
 
         </div>
       )}
