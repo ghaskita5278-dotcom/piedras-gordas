@@ -10,6 +10,7 @@ import Transacciones from './pages/Transacciones'
 import Recibo from './pages/Recibo'
 import Caja from './pages/Caja'
 import Aportes from './pages/Aportes'
+import Reportes from './pages/Reportes'
 
 const NAV = [
   { to: '/', label: 'Inicio', icon: '🏠' },
@@ -19,6 +20,7 @@ const NAV = [
   { to: '/trabajadores', label: 'Equipo', icon: '👷' },
   { to: '/socios', label: 'Socios', icon: '👥' },
   { to: '/aportes', label: 'Aportes', icon: '🏦' },
+  { to: '/reportes', label: 'Reportes', icon: '📊' },
 ]
 
 export default function App() {
@@ -43,6 +45,7 @@ export default function App() {
             <Route path="/caja" element={<Caja />} />
             <Route path="/transacciones" element={<Transacciones />} />
             <Route path="/aportes" element={<Aportes />} />
+            <Route path="/reportes" element={<Reportes />} />
             <Route path="/recibo/:id" element={<Recibo />} />
           </Routes>
         </main>

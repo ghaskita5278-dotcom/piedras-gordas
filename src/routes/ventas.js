@@ -3,8 +3,17 @@ const router = express.Router();
 const pool = require('../db');
 
 router.get('/', async (req, res, next) => {
+  const { desde, hasta } = req.query;
+  const params = [];
+  const conds = [];
+  if (desde) { params.push(desde); conds.push(`created_at::date >= $${params.length}::date`); }
+  if (hasta) { params.push(hasta); conds.push(`created_at::date <= $${params.length}::date`); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   try {
-    const result = await pool.query('SELECT * FROM ventas ORDER BY created_at DESC');
+    const result = await pool.query(
+      `SELECT * FROM ventas ${where} ORDER BY created_at DESC`,
+      params
+    );
     res.json(result.rows);
   } catch (err) {
     next(err);
