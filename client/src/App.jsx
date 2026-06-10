@@ -9,6 +9,7 @@ import PagoSocio from './pages/PagoSocio'
 import Transacciones from './pages/Transacciones'
 import Recibo from './pages/Recibo'
 import Caja from './pages/Caja'
+import Aportes from './pages/Aportes'
 
 const NAV = [
   { to: '/', label: 'Inicio', icon: '🏠' },
@@ -17,7 +18,7 @@ const NAV = [
   { to: '/ventas', label: 'Venta', icon: '📦' },
   { to: '/trabajadores', label: 'Equipo', icon: '👷' },
   { to: '/socios', label: 'Socios', icon: '👥' },
-  { to: '/transacciones', label: 'Historial', icon: '📋' },
+  { to: '/aportes', label: 'Aportes', icon: '🏦' },
 ]
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/pagos/socio" element={<PagoSocio />} />
             <Route path="/caja" element={<Caja />} />
             <Route path="/transacciones" element={<Transacciones />} />
+            <Route path="/aportes" element={<Aportes />} />
             <Route path="/recibo/:id" element={<Recibo />} />
           </Routes>
         </main>
